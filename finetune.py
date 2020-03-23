@@ -12,7 +12,7 @@ from torchvision.transforms import CenterCrop, ColorJitter, Compose, \
 from torchvision.models import resnet50
 
 import progressbar
-import metrics
+from utils.metrics import Accuracy
 
 # A dictionary mapping dataset_name:domain_name -> dataset directory path 
 root_dir = {'Office31:Amazon' : '/home/sonic/public_dataset/domain_adaptation/Office31/amazon/images',
@@ -150,8 +150,8 @@ def main(args):
 
     # Define metric objects 
     if not args.test:
-        metric_objects = {'train_acc' : metrics.Accuracy(),
-                          'val_acc' : metrics.Accuracy()}
+        metric_objects = {'train_acc' : Accuracy(),
+                          'val_acc' : Accuracy()}
         best_val_acc = 0.0 if checkpoint is None else checkpoint['best_val_acc']
         i = 0 if checkpoint is None else checkpoint['epoch']
         while i < num_epochs:
@@ -225,7 +225,7 @@ def main(args):
     else:
         if checkpoint is None:
             raise ValueError('{} is not trained.'.format(args.tag))
-        test_acc = metrics.Accuracy()
+        test_acc = Accuracy()
         model.eval() # Set model to evaluation mode.
         for x_test, y_test in loader['test']:
             x_test = x_test.to(device)
