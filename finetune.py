@@ -223,6 +223,8 @@ def main(args):
                 torch.save(checkpoint, checkpoint_path)
                 print('Model saved.')
     else:
+        if checkpoint is None:
+            raise ValueError('{} is not trained.'.format(args.tag))
         test_acc = metrics.Accuracy()
         model.eval() # Set model to evaluation mode.
         for x_test, y_test in loader['test']:

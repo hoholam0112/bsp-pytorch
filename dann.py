@@ -13,9 +13,9 @@ from torch.utils.data import DataLoader
 from torchvision.models import resnet50
 
 import progressbar
-import metrics
 import data
-from functions import GradientReversalLayer
+from utils.functions import GradientReversalLayer
+from utils.metrics import Accuracy
 
 def imshow(image, title=None):
     image = image.numpy().transpose([1, 2, 0])
@@ -160,8 +160,8 @@ def main(args):
 
     # Define metric objects 
     if not args.test:
-        metric_objects = {'train_acc' : metrics.Accuracy(),
-                          'val_acc' : metrics.Accuracy()}
+        metric_objects = {'train_acc' : Accuracy(),
+                          'val_acc' : Accuracy()}
         best_val_acc = 0.0 if checkpoint is None else checkpoint['best_val_acc']
         i = 0 if checkpoint is None else checkpoint['epoch']
         step = i*steps_per_epoch
@@ -255,7 +255,7 @@ def main(args):
                 torch.save(checkpoint, checkpoint_path)
                 print('Model saved.')
     else:
-        test_acc = metrics.Accuracy()
+        test_acc = Accuracy()
         cls.eval() # Set model to evaluation mode.
         for x_test, y_test in loader['test']:
             x_test = x_test.to(device)
@@ -263,7 +263,7 @@ def main(args):
 
             # Forward pass
             with torch.no_grad():
-                y_pred = cls(x_test)
+                y_pred, _ = cls(x_test)
                 test_acc.update_states(y_pred, y_test)
 
         print('test_acc: {:.4f}'.format(test_acc.result()))
