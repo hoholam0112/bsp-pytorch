@@ -221,8 +221,10 @@ def main(args):
                     _, feature_target = cls(x_target)
                     cls_loss = loss_fn['ce'](y_pred, y_source)
 
-                    feature = torch.cat([feature_target, feature_source], 0)
-                    feature_rev = GradientReversalLayer.apply(feature, alpha(step))
+                    #feature = torch.cat([feature_source, feature_target], 0)
+                    #feature_rev = GradientReversalLayer.apply(feature, alpha(step))
+
+                    feature_target_rev = GradientReversalLayer.apply(feature_target, alpha(step))
 
                     # Batch Spectral Penalization loss
                     if bsp:
@@ -232,7 +234,10 @@ def main(args):
                         bsp_loss = torch.tensor(0.0)
                     bsp_loss *= bsp_weight
 
-                    y_pred_domain = dis(feature_rev)
+                    #y_pred_domain = dis(feature_rev)
+                    y_pred_domain = torch.cat(
+                            [dis(feature_source.detach()), dis(feature_target_rev)], 0)
+
                     y_true_domain = torch.cat([torch.ones(x_source.size(0), 1),
                                                torch.zeros(x_target.size(0), 1)], 0)
                     y_true_domain = y_true_domain.to(device)
