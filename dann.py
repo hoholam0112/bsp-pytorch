@@ -1,5 +1,7 @@
 # DANN (Domain Adaptaion Neral Network) model
-# reference: https://arxiv.org/abs/1505.07818 
+# ref: https://arxiv.org/abs/1505.07818 
+# BSP (Batch Spectral Penalization).
+# ref: http://proceedings.mlr.press/v97/chen19i.html
 
 import sys, os, argparse
 from collections import OrderedDict, defaultdict
@@ -23,6 +25,23 @@ def imshow(image, title=None):
     if title is not None:
         plt.title(title)
     plt.pause(0.001)
+
+def batch_spectral_penalization(feature_source, feature_target, k=1):
+    """ Get batch spectral penalization loss
+
+    Args:
+        feature_source (torch.Tensor): a tensor of size [N_source, D_feature]
+        feature_target (torch.Tensor): a tensor of size [N_target, D_feature]
+        k (int): bsp_loss include to the k-th largest eigen value. default k=1.
+
+    Returns:
+        bsp_loss (scalar tensor)
+    """
+    _, singular_source, _ = feature_source.svd()
+    _, singular_target, _ = feature_target.svd()
+    bsp_loss = torch.sum(singular_source[:k]**2 +
+                         singular_target[:k]**2)
+    return bsp_loss
 
 class Alpha:
     """ weigh gradient of domain discrimination loss w.r.t classifier params """
@@ -101,10 +120,16 @@ def main(args):
     dataset_name = args.dataset_name
     source_domain = args.source_domain
     target_domain = args.target_domain
+    method_name = 'dann+bsp' if args.bsp else 'dann'
 
     init_lr = args.init_lr or 1e-5
     batch_size = args.batch_size or 64
     num_epochs = args.num_epochs or 200
+
+    # params for BSP
+    bsp = args.bsp
+    bsp_weight = args.bsp_weight or 1e-4
+    bsp_k = args.k or 1
 
     os.makedirs('./train_logs/dann', exist_ok=True)
     checkpoint_path = './train_logs/dann/{}.pt'.format(args.tag)
@@ -199,13 +224,21 @@ def main(args):
                     feature = torch.cat([feature_target, feature_source], 0)
                     feature_rev = GradientReversalLayer.apply(feature, alpha(step))
 
+                    # Batch Spectral Penalization loss
+                    if bsp:
+                        bsp_loss = batch_spectral_penalization(
+                                feature_source, feature_target, bsp_k)
+                    else:
+                        bsp_loss = torch.tensor(0.0)
+                    bsp_loss *= bsp_weight
+
                     y_pred_domain = dis(feature_rev)
                     y_true_domain = torch.cat([torch.ones(x_source.size(0), 1),
                                                torch.zeros(x_target.size(0), 1)], 0)
                     y_true_domain = y_true_domain.to(device)
 
                     adv_loss = loss_fn['bce'](y_pred_domain, y_true_domain)
-                    loss = cls_loss + adv_loss
+                    loss = cls_loss + adv_loss + bsp_loss
 
                     # Backward pass 
                     optimizer.zero_grad()
@@ -215,6 +248,8 @@ def main(args):
                     # Update training metrics
                     training_loss['cls_loss'] += cls_loss.item() * x_source.size(0)
                     training_loss['adv_loss'] += adv_loss.item() * x_source.size(0)
+                    if bsp:
+                        training_loss['bsp_loss'] += bsp_loss.item() * x_source.size(0)
                     num_samples += x_source.size(0)
                     metric_objects['train_acc'].update_states(y_pred, y_source)
 
@@ -236,9 +271,12 @@ def main(args):
 
             # Display results after an epoch
             i += 1
-            print('Epoch: {:d}/{:d}'.format(i, num_epochs))
+            print('Epoch: {:d}/{:d} | dataset:{}: {} to {} | method: {}'.format(i, num_epochs,
+                dataset_name, source_domain, target_domain, method_name))
             print('training classification loss: {:.4f}'.format(training_loss['cls_loss']))
             print('training adversarial loss: {:.4f}'.format(training_loss['adv_loss']))
+            if bsp:
+                print('training bsp loss: {:.4f}'.format(training_loss['bsp_loss']))
             print('alpha: {:.4f}'.format(alpha(step)))
             for k, v in metric_objects.items():
                 print('{}: {:.4f}'.format(k, v.result()))
@@ -277,6 +315,11 @@ if __name__ == '__main__':
     parser.add_argument('target_domain', help='A name of target domain.', type=str)
     parser.add_argument('--tag', help='A tag name of experiment.', type=str, required=True)
     parser.add_argument('--test', help='If passed, skip training phase perform test only.', action='store_true')
+
+    # Params for batch spectral penalization
+    parser.add_argument('--bsp', help='If passed, apply batch spectral penalization.', action='store_true')
+    parser.add_argument('--bsp_weight', help='Weight for batch spectral penalization loss', type=float)
+    parser.add_argument('--k', help='Eigen values to the k-th largest one will be included to BSP loss.', type=int)
 
     # Optional arguments
     parser.add_argument('--gpu', help='Which GPUs to be used for training.', type=int, required=True)
