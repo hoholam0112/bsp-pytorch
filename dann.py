@@ -122,7 +122,7 @@ def main(args):
     target_domain = args.target_domain
     method_name = 'dann+bsp' if args.bsp else 'dann'
 
-    init_lr = args.init_lr or 1e-5
+    init_lr = args.init_lr or 0.003
     batch_size = args.batch_size or 64
     num_epochs = args.num_epochs or 200
 
@@ -176,10 +176,16 @@ def main(args):
         ]
     optimizer = optim.SGD(per_parameter_options,
                           momentum=0.9,
-                          weight_decay=0.0005,
+                          weight_decay=0.001,
                           nesterov=True)
     if checkpoint is not None:
         optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+
+    decay_factor = 0.99
+    lr_scheduler = optim.lr_scheduler.MultiplicativeLR(optimizer,
+            lambda epoch: decay_factor)
+    if checkpoint is not None:
+        lr_scheduler.load_state_dict(checkpoint['lr_scheduler_state_dict'])
 
     alpha = Alpha(gamma=10.0, max_iter=10000)
 
@@ -262,6 +268,7 @@ def main(args):
 
                 for k, v in training_loss.items():
                     training_loss[k] = v / float(num_samples)
+                lr_scheduler.step()
 
             # Validation phase
             cls.eval() # Set model to evaluation mode.
@@ -293,6 +300,7 @@ def main(args):
                 checkpoint = {'cls_state_dict' : cls.state_dict(),
                               'dis_state_dict' : dis.state_dict(),
                               'optimizer_state_dict' : optimizer.state_dict(),
+                              'lr_scheduler_state_dict' : lr_scheduler.state_dict(),
                               'best_val_acc' : best_val_acc,
                               'epoch' : i}
                 torch.save(checkpoint, checkpoint_path)
