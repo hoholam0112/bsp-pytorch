@@ -176,18 +176,18 @@ def main(args):
         ]
     optimizer = optim.SGD(per_parameter_options,
                           momentum=0.9,
-                          weight_decay=0.001,
+                          weight_decay=0.002,
                           nesterov=True)
     if checkpoint is not None:
         optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
 
-    decay_factor = 0.99
+    decay_factor = 0.997
     lr_scheduler = optim.lr_scheduler.MultiplicativeLR(optimizer,
             lambda epoch: decay_factor)
     if checkpoint is not None:
         lr_scheduler.load_state_dict(checkpoint['lr_scheduler_state_dict'])
 
-    alpha = Alpha(gamma=10.0, max_iter=10000)
+    alpha = Alpha(gamma=10.0, max_iter=20000)
 
     # Define metric objects 
     if not args.test:
